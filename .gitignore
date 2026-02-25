@@ -22,3 +22,12 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Documentation (exclude all .md except README)
+*.md
+!README.md
+
+# Environment files
+.env
+.env.local
+.env.*.local

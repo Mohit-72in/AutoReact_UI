@@ -5,7 +5,10 @@ import {
   Settings,
   Layout,
   Code2,
-  Layers
+  Layers,
+  LogIn,
+  LogOut,
+  User
 } from 'lucide-react';
 import Button from '../common/Button';
 
@@ -13,7 +16,16 @@ import Button from '../common/Button';
  * Sidebar Component
  * Navigation and project list
  */
-const Sidebar = ({ projects = [], onNewProject, className = '' }) => {
+const Sidebar = ({ 
+  projects = [], 
+  onNewProject, 
+  onLoadProject, 
+  onShowAuth,
+  onLogout,
+  isAuthenticated = false,
+  user = null,
+  className = '' 
+}) => {
   const defaultProjects = [
     { id: 1, icon: <Layout className="w-4 h-4" />, label: "E-commerce App" },
     { id: 2, icon: <Code2 className="w-4 h-4" />, label: "Personal Portfolio" },
@@ -42,6 +54,7 @@ const Sidebar = ({ projects = [], onNewProject, className = '' }) => {
           className="w-full bg-white/5 text-white hover:bg-white/10 rounded-xl justify-start"
           onClick={onNewProject}
           leftIcon={<Plus className="w-5 h-5" />}
+          title="Start a new project"
         >
           <span className="hidden md:block">New Project</span>
         </Button>
@@ -58,9 +71,10 @@ const Sidebar = ({ projects = [], onNewProject, className = '' }) => {
             key={item.id} 
             className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-white/5 transition-colors group"
             title={item.label || item.name}
+            onClick={() => onLoadProject && onLoadProject(item)}
           >
             <div className="text-slate-500 group-hover:text-primary transition-colors">
-              {item.icon}
+              {item.icon || <Layout className="w-4 h-4" />}
             </div>
             <span className="hidden md:block text-sm truncate">
               {item.label || item.name}
@@ -70,8 +84,45 @@ const Sidebar = ({ projects = [], onNewProject, className = '' }) => {
       </div>
 
       {/* Settings */}
-      <div className="p-4 border-t border-slate-800">
-        <button className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors">
+      <div className="p-4 border-t border-slate-800 space-y-2">
+        {isAuthenticated && user ? (
+          <>
+            {/* User Info */}
+            <div className="flex items-center gap-3 p-2 rounded-lg bg-white/5 mb-2">
+              <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white font-semibold text-sm">
+                {user.username?.charAt(0).toUpperCase() || 'U'}
+              </div>
+              <div className="hidden md:block flex-1 min-w-0">
+                <p className="text-sm font-medium text-white truncate">{user.username}</p>
+                <p className="text-xs text-slate-400 truncate">{user.email}</p>
+              </div>
+            </div>
+            {/* Logout Button */}
+            <button 
+              onClick={onLogout}
+              className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-red-500/10 text-red-400 hover:text-red-300 transition-colors"
+              title="Logout"
+            >
+              <LogOut className="w-5 h-5" />
+              <span className="hidden md:block text-sm">Logout</span>
+            </button>
+          </>
+        ) : (
+          /* Login Button */
+          <button 
+            onClick={onShowAuth}
+            className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-blue-500/10 text-blue-400 hover:text-blue-300 transition-colors"
+            title="Login"
+          >
+            <LogIn className="w-5 h-5" />
+            <span className="hidden md:block text-sm">Login / Sign Up</span>
+          </button>
+        )}
+
+        <button 
+          className="w-full flex items-center gap-3 p-2 rounded-lg hover:bg-white/5 transition-colors"
+          title="Settings"
+        >
           <Settings className="w-5 h-5" />
           <span className="hidden md:block text-sm">Settings</span>
         </button>

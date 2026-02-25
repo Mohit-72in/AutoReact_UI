@@ -28,15 +28,18 @@ export const useAIChat = (initialMessages = []) => {
       // Call AI API
       const response = await apiService.generateUI(content, messages);
 
+      // Extract data from response (backend wraps in { success, data: {...} })
+      const { data } = response;
+
       // Add assistant response
       const assistantMessage = {
         role: 'assistant',
-        content: response.message || 'Component generated successfully!',
+        content: data.message || 'Component generated successfully!',
         timestamp: Date.now(),
       };
 
       setMessages(prev => [...prev, assistantMessage]);
-      setGeneratedCode(response.code || '');
+      setGeneratedCode(data.code || '');
       setStatus(RESPONSE_STATUS.SUCCESS);
 
       return response;

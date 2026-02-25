@@ -12,6 +12,24 @@ class APIService {
   }
 
   /**
+   * Set authentication token
+   */
+  setAuthToken(token) {
+    this.authToken = token;
+  }
+
+  /**
+   * Get auth headers
+   */
+  getAuthHeaders() {
+    const token = this.authToken || localStorage.getItem('accessToken');
+    if (token) {
+      return { Authorization: `Bearer ${token}` };
+    }
+    return {};
+  }
+
+  /**
    * Generic fetch wrapper with error handling
    */
   async request(endpoint, options = {}) {
@@ -23,6 +41,7 @@ class APIService {
         ...options,
         headers: {
           'Content-Type': 'application/json',
+          ...this.getAuthHeaders(),
           ...options.headers,
         },
         signal: controller.signal,
@@ -49,7 +68,8 @@ class APIService {
         throw new Error('Request timeout. Please try again.');
       }
       
-      return handleAPIError(error);
+      // handleAPIError throws, so no need to return
+      handleAPIError(error);
     }
   }
 
@@ -60,13 +80,38 @@ class APIService {
    * @returns {Promise<Object>} Generated UI data
    */
   async generateUI(prompt, history = []) {
-    return this.request('/generate', {
+    return this.request('/ai/generate', {
       method: 'POST',
       body: JSON.stringify({
         prompt,
-        history: history.slice(-5), // Send last 5 messages for context
-        model: 'gpt-4', // or your preferred model
+        context: history.slice(-5), // Send last 5 messages for context
+        model: 'gpt-4',
       }),
+    });
+  }
+
+  /**
+   * Login user
+   * @param {string} email - User email
+   * @param {string} password - User password
+   * @returns {Promise<Object>} User data and tokens
+   */
+  async login(email, password) {
+    return this.request('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+  }
+
+  /**
+   * Register new user
+   * @param {Object} userData - User registration data
+   * @returns {Promise<Object>} User data and tokens
+   */
+  async register(userData) {
+    return this.request('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(userData),
     });
   }
 
