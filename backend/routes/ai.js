@@ -1,15 +1,48 @@
 const express = require('express');
 const router = express.Router();
 const OpenAI = require('openai');
+const GeminiAgent = require('../services/geminiAgent');
 const { authenticateToken, optionalAuth } = require('../middleware/auth');
 const { asyncHandler, APIError } = require('../middleware/errorHandler');
 const { aiLimiter } = require('../middleware/rateLimiter');
 
-// Initialize OpenAI (only if API key exists)
-const hasOpenAIKey = process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== 'your-openai-api-key-here';
-const openai = hasOpenAIKey ? new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-}) : null;
+// Initialize AI services
+// Check for valid Gemini API key (starts with AIza for Google AI Studio)
+const hasGeminiKey = process.env.GEMINI_API_KEY && 
+  process.env.GEMINI_API_KEY.length > 20 && 
+  !process.env.GEMINI_API_KEY.includes('your-') &&
+  !process.env.GEMINI_API_KEY.includes('placeholder');
+
+const hasOpenAIKey = process.env.OPENAI_API_KEY && 
+  process.env.OPENAI_API_KEY.startsWith('sk-') &&
+  process.env.OPENAI_API_KEY.length > 20;
+
+// Prefer Gemini (more powerful with function calling), fallback to OpenAI
+let gemini = null;
+const openai = hasOpenAIKey ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
+
+// if we have a key, verify it by performing a quick API call
+(async () => {
+  if (hasGeminiKey) {
+    const candidate = new GeminiAgent(process.env.GEMINI_API_KEY);
+    const valid = await candidate.verifyKey();
+    if (valid) {
+      gemini = candidate;
+      console.log('🤖 AI Services initialized:');
+      console.log('  • Gemini AI: ✅ Ready');
+    } else {
+      console.warn('⚠️ Gemini API key invalid or not enabled for Generative Language');
+      console.warn('   Please generate a new key from https://aistudio.google.com/app/apikey');
+      console.log('🤖 AI Services initialized:');
+      console.log('  • Gemini AI: ❌ Invalid API key');
+    }
+  } else {
+    console.log('🤖 AI Services initialized:');
+    console.log('  • Gemini AI: ❌ No API key');
+  }
+
+  console.log(`  • OpenAI: ${hasOpenAIKey ? '✅ Ready' : '❌ No API key'}`);
+})();
 
 /**
  * Generate mock UI code for development
@@ -150,26 +183,39 @@ router.post(
       throw new APIError('Prompt is required', 400);
     }
     
-    // Development mode: Use mock data if OpenAI key not configured
-    if (!hasOpenAIKey) {
-      console.log('⚠️  Using mock AI responses (OpenAI API key not configured)');
-      const mockCode = generateMockCode(prompt);
-      
-      return res.json({
-        success: true,
-        data: {
-          code: mockCode,
-          message: '✅ Component generated! (Development mode - add OpenAI API key for real AI)',
-        },
-      });
-    }
-
-    // Build conversation context
-    const messages = [
-      {
-        role: 'system',
-        content: `You are an expert frontend developer. Generate clean, modern, and responsive React component code using Tailwind CSS. 
+    // Priority 1: Use Gemini AI (most powerful with function calling)
+    if (gemini) {
+      try {
+        console.log('🤖 Using Gemini AI for generation...');
         
+        const result = await gemini.generateComponent(prompt);
+        
+        return res.json({
+          success: true,
+          data: {
+            code: result.code,
+            message: '✅ Component generated with Gemini AI!',
+          },
+        });
+      } catch (error) {
+        console.error('❌ Gemini AI error:', error.message);
+        // Fall through to OpenAI or mock
+      }
+    } else if (hasGeminiKey) {
+      // we had a key but it failed verification earlier
+      console.warn('⚠️ Skipping Gemini generation because API key is invalid');
+    }
+    
+    // Priority 2: Use OpenAI if Gemini fails or unavailable
+    if (hasOpenAIKey && openai) {
+      try {
+        console.log('🤖 Using OpenAI for generation...');
+        
+        const messages = [
+          {
+            role: 'system',
+            content: `You are an expert frontend developer. Generate clean, modern, and responsive React component code using Tailwind CSS. 
+            
 IMPORTANT GUIDELINES:
 - Return ONLY the JSX component code, no explanations
 - Use Tailwind CSS for all styling
@@ -178,46 +224,51 @@ IMPORTANT GUIDELINES:
 - Use modern React patterns (hooks, functional components)
 - Add comments for complex logic
 - Ensure code is production-ready`,
-      },
-      ...context.map((msg) => ({
-        role: msg.role,
-        content: msg.content,
-      })),
-      {
-        role: 'user',
-        content: prompt,
-      },
-    ];
+          },
+          ...context.map((msg) => ({
+            role: msg.role,
+            content: msg.content,
+          })),
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ];
 
-    try {
-      // Call OpenAI API
-      const completion = await openai.chat.completions.create({
-        model,
-        messages,
-        temperature: 0.7,
-        max_tokens: 2000,
-      });
+        const completion = await openai.chat.completions.create({
+          model,
+          messages,
+          temperature: 0.7,
+          max_tokens: 2000,
+        });
 
-      const generatedCode = completion.choices[0].message.content;
+        const generatedCode = completion.choices[0].message.content;
 
-      res.json({
-        success: true,
-        data: {
-          code: generatedCode,
-          message: 'Code generated successfully!',
-          tokens: completion.usage,
-        },
-      });
-    } catch (error) {
-      // Handle OpenAI API errors
-      if (error.response) {
-        throw new APIError(
-          `OpenAI API error: ${error.response.data.error.message}`,
-          error.response.status
-        );
+        return res.json({
+          success: true,
+          data: {
+            code: generatedCode,
+            message: 'Component generated with OpenAI!',
+            tokens: completion.usage,
+          },
+        });
+      } catch (error) {
+        console.error('❌ OpenAI error:', error.message);
+        // Fall through to mock
       }
-      throw new APIError('Failed to generate code', 500);
     }
+    
+    // Priority 3: Use mock data as fallback
+    console.log('⚠️  Using mock AI responses (No AI API keys configured)');
+    const mockCode = generateMockCode(prompt);
+    
+    return res.json({
+      success: true,
+      data: {
+        code: mockCode,
+        message: '✅ Component generated! (Development mode - add Gemini or OpenAI API key for real AI)',
+      },
+    });
   })
 );
 
@@ -238,11 +289,11 @@ router.post(
     }
     
     // Development mode: Return mock improvement
-    if (!hasOpenAIKey) {
+    if (!hasGeminiKey && !hasOpenAIKey) {
       return res.json({
         success: true,
         data: {
-          code: `// Code improved based on: ${instruction}\n${code}\n\n// Note: Add OpenAI API key for real AI improvements`,
+          code: `// Code improved based on: ${instruction}\n${code}\n\n// Note: Add Gemini or OpenAI API key for real AI improvements`,
           message: 'Code improved! (Development mode)',
         },
       });

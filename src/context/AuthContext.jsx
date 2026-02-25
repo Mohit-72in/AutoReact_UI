@@ -46,15 +46,25 @@ export const AuthProvider = ({ children }) => {
       setUser(response.data.data.user);
       setLoading(false);
     } catch (error) {
-      console.error('Failed to load user:', error.message);
-      // Token expired or invalid, try refresh
-      if (error.response?.status === 401 && refreshToken) {
-        const refreshed = await handleTokenRefresh();
-        if (!refreshed) {
-          logout();
+      // Silently handle 401 errors (user not logged in)
+      if (error.response?.status === 401) {
+        // Try refresh token if available
+        if (refreshToken) {
+          const refreshed = await handleTokenRefresh();
+          if (!refreshed) {
+            logout();
+          }
+        } else {
+          // No refresh token, just clear state (user not logged in)
+          setAccessToken(null);
+          setRefreshToken(null);
+          setUser(null);
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
         }
       } else {
-        // Clear invalid tokens
+        // Other errors - log them
+        console.error('Failed to load user:', error.message);
         logout();
       }
       setLoading(false);
