@@ -119,16 +119,17 @@ class GeminiAgent {
     const platform = os.platform();
     const responses = [];
     let iterations = 0;
-    const maxIterations = 10; // Prevent infinite loops
+    const maxIterations = 15;
 
     while (iterations < maxIterations) {
       iterations++;
 
       try {
         const responseObj = await this.genAI.models.generateContent({
-          model: 'gemini-1.5-flash',
+          model: 'gemini-3-flash-preview',
           contents: this.history,
-          systemInstruction: `You are a website builder expert. You create beautiful, modern, responsive websites using HTML, CSS, and JavaScript.
+          config: {
+            systemInstruction: `You are a website builder expert. You create beautiful, modern, responsive websites using HTML, CSS, and JavaScript.
 
 Current user operating system is: ${platform}.
 
@@ -143,32 +144,15 @@ Guidelines:
 4. Use writeFile for creating HTML/CSS/JS files
 5. Organize files properly (create folders as needed)
 6. Test that all resources are properly linked
-7. Return only the component code, not explanations
+7. Always call tools to create files/folders before saying you're done
 
-When creating files, use writeFile tool with full HTML structure.`,
-          tools: [
-            {
-              functionDeclarations: this.getToolDeclarations(),
-            },
-          ],
-          safetySettings: [
-            {
-              category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-              threshold: HarmBlockThreshold.BLOCK_NONE,
-            },
-            {
-              category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-              threshold: HarmBlockThreshold.BLOCK_NONE,
-            },
-            {
-              category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-              threshold: HarmBlockThreshold.BLOCK_NONE,
-            },
-            {
-              category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-              threshold: HarmBlockThreshold.BLOCK_NONE,
-            },
-          ],
+When creating files, ALWAYS use writeFile tool with full HTML structure.`,
+            tools: [
+              {
+                functionDeclarations: this.getToolDeclarations(),
+              },
+            ],
+          },
         });
 
         const parts = responseObj.candidates[0].content.parts;

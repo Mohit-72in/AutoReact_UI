@@ -182,40 +182,52 @@ router.post(
     if (!prompt) {
       throw new APIError('Prompt is required', 400);
     }
-    
-    // Priority 1: Use Gemini AI (most powerful with function calling)
+
+    // Priority 1: Try creating a new Gemini instance if we have a key
+    if (hasGeminiKey && !gemini) {
+      try {
+        console.log('🤖 Attempting to initialize Gemini AI...');
+        const newAgent = new GeminiAgent(process.env.GEMINI_API_KEY);
+        const valid = await newAgent.verifyKey();
+        if (valid) {
+          gemini = newAgent;
+          console.log('✅ Gemini AI initialized successfully');
+        }
+      } catch (error) {
+        console.error('❌ Failed to initialize Gemini:', error.message);
+      }
+    }
+
+    // Priority 2: Use Gemini AI (most powerful with function calling)
     if (gemini) {
       try {
         console.log('🤖 Using Gemini AI for generation...');
-        
+
         const result = await gemini.generateComponent(prompt);
-        
+
         return res.json({
           success: true,
           data: {
             code: result.code,
-            message: '✅ Component generated with Gemini AI!',
+            message: 'Component generated with Gemini AI',
           },
         });
       } catch (error) {
         console.error('❌ Gemini AI error:', error.message);
-        // Fall through to OpenAI or mock
+        gemini = null;
       }
-    } else if (hasGeminiKey) {
-      // we had a key but it failed verification earlier
-      console.warn('⚠️ Skipping Gemini generation because API key is invalid');
     }
-    
-    // Priority 2: Use OpenAI if Gemini fails or unavailable
+
+    // Priority 3: Use OpenAI if Gemini fails or unavailable
     if (hasOpenAIKey && openai) {
       try {
         console.log('🤖 Using OpenAI for generation...');
-        
+
         const messages = [
           {
             role: 'system',
-            content: `You are an expert frontend developer. Generate clean, modern, and responsive React component code using Tailwind CSS. 
-            
+            content: `You are an expert frontend developer. Generate clean, modern, and responsive React component code using Tailwind CSS.
+
 IMPORTANT GUIDELINES:
 - Return ONLY the JSX component code, no explanations
 - Use Tailwind CSS for all styling
@@ -248,25 +260,24 @@ IMPORTANT GUIDELINES:
           success: true,
           data: {
             code: generatedCode,
-            message: 'Component generated with OpenAI!',
+            message: 'Component generated with OpenAI',
             tokens: completion.usage,
           },
         });
       } catch (error) {
         console.error('❌ OpenAI error:', error.message);
-        // Fall through to mock
       }
     }
-    
-    // Priority 3: Use mock data as fallback
-    console.log('⚠️  Using mock AI responses (No AI API keys configured)');
+
+    // Priority 4: Use mock data as fallback
+    console.log('⚠️  Using mock AI responses (No valid AI API keys configured)');
     const mockCode = generateMockCode(prompt);
-    
+
     return res.json({
       success: true,
       data: {
         code: mockCode,
-        message: '✅ Component generated! (Development mode - add Gemini or OpenAI API key for real AI)',
+        message: 'Component generated in demo mode. Add a valid Gemini API key to enable AI generation.',
       },
     });
   })
